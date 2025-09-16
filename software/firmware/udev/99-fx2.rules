@@ -1,0 +1,2 @@
+# Allow any user to access this FX2 (adjust VID/PID to match your device)
+SUBSYSTEM=="usb", ATTR{idVendor}=="04b4", ATTR{idProduct}=="8613", MODE="0666"

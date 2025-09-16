@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "sn74lvc1g00dbv")(type "KiCad")(uri "${KIPRJMOD}/sn74lvc1g00dbv.kicad_sym")(options "")(descr ""))
+  (lib (name "TP74LVC1G132S5")(type "KiCad")(uri "${KIPRJMOD}/TP74LVC1G132S5.kicad_sym")(options "")(descr ""))
+)
