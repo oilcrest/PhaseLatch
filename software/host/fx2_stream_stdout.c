@@ -11,6 +11,7 @@
 #include <errno.h>
 
 static volatile int g_run = 1;
+static volatile int g_inflight = 0;
 
 typedef struct {
   libusb_device_handle *devh;
@@ -23,6 +24,7 @@ typedef struct {
   ctx_t *ctx;
   struct libusb_transfer *xfer;
   uint8_t *buf;
+  int done;
 } slot_t;
 
 static void on_sigint(int s){ (void)s; g_run = 0; }
@@ -33,13 +35,33 @@ static void LIBUSB_CALL on_rx(struct libusb_transfer *xfer){
     size_t off = 0; const uint8_t *p = xfer->buffer; size_t n = (size_t)xfer->actual_length;
     while (off < n) {
       ssize_t w = write(STDOUT_FILENO, p + off, n - off);
-      if (w < 0) { if (errno == EINTR) continue; g_run = 0; break; }
+      if (w < 0) {
+        if (errno == EINTR) continue;
+        // Downstream closed the pipe (e.g. `head -c`, calibration tool reading N samples).
+        // Treat as a clean stop.
+        if (errno == EPIPE) {
+          g_run = 0;
+          break;
+        }
+        g_run = 0;
+        break;
+      }
       off += (size_t)w;
     }
   } else if (xfer->status != LIBUSB_TRANSFER_COMPLETED) {
     g_run = 0;
   }
-  if (g_run) libusb_submit_transfer(xfer);
+
+  if (g_run) {
+    int rc = libusb_submit_transfer(xfer);
+    if (rc != 0) g_run = 0;
+    return;
+  }
+
+  if (!slot->done) {
+    slot->done = 1;
+    g_inflight--;
+  }
 }
 
 static void usage(const char* a0){
@@ -73,14 +95,26 @@ int main(int argc, char **argv){
 
   slot_t *slots = calloc((size_t)nin,sizeof(slot_t));
   struct timeval tv = {0,50000};
+  int submitted = 0;
   for(int i=0;i<nin;i++){
-    slots[i].ctx=NULL; slots[i].buf=malloc(xlen); slots[i].xfer=libusb_alloc_transfer(0);
+    slots[i].ctx=NULL; slots[i].buf=malloc(xlen); slots[i].xfer=libusb_alloc_transfer(0); slots[i].done = 0;
     libusb_fill_bulk_transfer(slots[i].xfer,devh,ep,slots[i].buf,(int)xlen,on_rx,&slots[i],0);
-    int rc=libusb_submit_transfer(slots[i].xfer); if(rc){ fprintf(stderr,"submit failed %d\n",rc); g_run=0; break; }
+    int rc=libusb_submit_transfer(slots[i].xfer);
+    if(rc){ fprintf(stderr,"submit failed %d\n",rc); g_run=0; break; }
+    submitted++;
   }
+  g_inflight = submitted;
   while(g_run){ if(libusb_handle_events_timeout_completed(NULL,&tv,NULL)!=0) break; }
-  for(int i=0;i<nin;i++) if(slots[i].xfer) libusb_cancel_transfer(slots[i].xfer);
+
+  // Stop and drain: cancelling is async; continue handling events until callbacks run.
+  g_run = 0;
+  for(int i=0;i<nin;i++) if(slots[i].xfer && !slots[i].done) libusb_cancel_transfer(slots[i].xfer);
+  while (g_inflight > 0) {
+    (void)libusb_handle_events_timeout_completed(NULL,&tv,NULL);
+  }
+
   for(int i=0;i<nin;i++){ if(slots[i].xfer) libusb_free_transfer(slots[i].xfer); free(slots[i].buf);} 
+  free(slots);
   libusb_release_interface(devh,iface); libusb_close(devh); libusb_exit(NULL);
   return 0;
 }

@@ -1,8 +1,68 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ ! -p /tmp/adc.pipe ]]; then
-    mkfifo /tmp/adc.pipe
+
+usage() {
+    cat >&2 <<'EOF'
+Usage: ./pipeline.sh [--dcI N --dcQ N] [--kRe X --kIm Y] [--no-dc] [--no-iqbal] [--no-build] [--no-flash]
+
+Streams CF32 IQ to /tmp/iq.fifo for GQRX.
+
+Calibration is run-once and manual; then paste the numbers into the args:
+
+    DC (silence, u8 domain):
+        ../host/fx2_stream_stdout -i 0 -t 16384 -n 32 | ../host/iq_dc_cal --samples 65536
+
+    IQ balance (tone, CF32 domain):
+        ../host/fx2_stream_stdout -i 0 -t 16384 -n 32 | ../host/iq_to_cf32 -m 8u \
+            | ../host/iq_iqbal_tone_cal_cf32 --tone-hz 2657000 --fs-hz 20000000 --samples 65536
+
+Examples:
+    ./pipeline.sh --dcI 3 --dcQ 3
+    ./pipeline.sh --dcI 3 --dcQ 3 --kRe -0.0378 --kIm 0.4850
+EOF
+}
+
+DO_BUILD=1
+DO_FLASH=1
+DO_DC=1
+DO_IQBAL=1
+
+DC_I=0
+DC_Q=0
+K_RE=""
+K_IM=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dcI) DC_I="$2"; shift 2;;
+        --dcQ) DC_Q="$2"; shift 2;;
+        --kRe) K_RE="$2"; shift 2;;
+        --kIm) K_IM="$2"; shift 2;;
+        --no-dc) DO_DC=0; shift;;
+        --no-iqbal) DO_IQBAL=0; shift;;
+        --no-build) DO_BUILD=0; shift;;
+        --no-flash) DO_FLASH=0; shift;;
+        -h|--help) usage; exit 0;;
+        *) echo "Unknown arg: $1" >&2; usage; exit 2;;
+    esac
+done
+
+if [[ "$DO_FLASH" == "1" ]]; then
+    make -C ../firmware/ flash
 fi
-# Change VID/PID/EP/interface as needed
-#../host/fx2_stream_stdout -v 0x04B4 -p 0x8613 -e 0x86 -i 0 -t 16384 -n 32 > /tmp/adc.pipe
-../host/fx2_stream_stdout -v 0x04B4 -p 0x8613 -e 0x86 -i 0 -t 16384 -n 32 | pv > /dev/null
+if [[ "$DO_BUILD" == "1" ]]; then
+    make -C ../host
+fi
+
+if [[ ! -p /tmp/iq.fifo ]]; then
+    rm -f /tmp/iq.fifo
+    mkfifo /tmp/iq.fifo
+fi
+
+echo "stream -> /tmp/iq.fifo  dc=${DO_DC}(${DC_I},${DC_Q})  iqbal=${DO_IQBAL}(${K_RE:-none},${K_IM:-none})" >&2
+
+../host/fx2_stream_stdout -i 0 -t 16384 -n 32 \
+    | ( if [[ "$DO_DC" == "1" ]]; then ../host/iq_dc_apply --dcI "$DC_I" --dcQ "$DC_Q"; else cat; fi ) \
+    | ../host/iq_to_cf32 -m 8u \
+    | ( if [[ "$DO_IQBAL" == "1" && -n "$K_RE" && -n "$K_IM" ]]; then ../host/iq_iqbal_apply_cf32 --kRe "$K_RE" --kIm "$K_IM"; else cat; fi ) \
+    > /tmp/iq.fifo

@@ -76,5 +76,64 @@ See `examples/grc-integration.md` for more options.
 - Each 512‑byte packet carries **256 samples** at 16‑bit padded.
 - Typical sustained USB2 HS bulk throughput is **~40 MB/s** on a good host. Plan your IFCLK accordingly (or decimate in front of FX2).  
 
+## Demo cheat sheet (PhaseLatch → Gqrx)
+
+This is a minimal “copy/paste” workflow to get a live stream into **Gqrx** via the FIFO at `/tmp/iq.fifo`.
+
+### 0) Build host tools
+```bash
+cd host
+make
+```
+
+### 1) Create the FIFO (once)
+```bash
+mkfifo /tmp/iq.fifo
+```
+
+### 2) Start streaming to Gqrx (no calibration)
+If your raw stream is interleaved unsigned 8‑bit IQ (u8 I,Q), convert to CF32 and write to the FIFO:
+```bash
+./fx2_stream_stdout -i 0 -t 16384 -n 32 \
+	| ./iq_to_cf32 -m 8u \
+	> /tmp/iq.fifo
+```
+
+### 3) Apply DC correction (run-once calibration, then hardcode)
+Measure (run while input is silent):
+```bash
+./fx2_stream_stdout -i 0 -t 16384 -n 32 \
+	| ./iq_dc_cal --samples 65536
+```
+
+Then stream with the measured values:
+```bash
+./fx2_stream_stdout -i 0 -t 16384 -n 32 \
+	| ./iq_dc_apply --dcI 3 --dcQ 3 \
+	| ./iq_to_cf32 -m 8u \
+	> /tmp/iq.fifo
+```
+
+### 4) Apply IQ balance (tone calibration, then hardcode)
+Tone calibration (example numbers):
+```bash
+./fx2_stream_stdout -i 0 -t 16384 -n 32 \
+	| ./iq_to_cf32 -m 8u \
+	| ./iq_iqbal_tone_cal_cf32 --tone-hz 2657000 --fs-hz 20000000 --samples 65536
+```
+
+Then stream with correction enabled:
+```bash
+./fx2_stream_stdout -i 0 -t 16384 -n 32 \
+	| ./iq_dc_apply --dcI 3 --dcQ 3 \
+	| ./iq_to_cf32 -m 8u \
+	| ./iq_iqbal_apply_cf32 --kRe -0.0378 --kIm 0.4850 \
+	> /tmp/iq.fifo
+```
+
+### Notes
+- The writer will block unless **Gqrx is actively reading** `/tmp/iq.fifo`.
+- If you want a single command wrapper, see `examples/pipeline.sh`.
+
 ## License
-MIT (for this repository’s sources). You must ensure your usage complies with your board vendor’s terms and Infineon/Cypress documentation licenses.
+MIT (for this repository’s sources). 

@@ -16,12 +16,30 @@ else
   INC_PATH := -I$(HOMEBREW_INC)
 endif
 
-all: fx2_stream_stdout
+all: fx2_stream_stdout iq_to_cf32 iq_dc_block iq_dc_cal iq_dc_apply iq_iqbal_tone_cal_cf32 iq_iqbal_apply_cf32
 
 fx2_stream_stdout: fx2_stream_stdout.c
 	$(CC) $(CFLAGS) $(INC_PATH) -o $@ $< $(LDFLAGS)
 
 clean:
-	rm -f fx2_stream_stdout
+	rm -f fx2_stream_stdout iq_to_cf32 iq_dc_block iq_dc_cal iq_dc_apply iq_iqbal_tone_cal_cf32 iq_iqbal_apply_cf32
+
+iq_to_cf32: iq_to_cf32.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+iq_dc_block: iq_dc_block.c
+	$(CC) $(CFLAGS) -o $@ $< -lm
+
+iq_dc_cal: iq_dc_cal.c
+	$(CC) $(CFLAGS) -o $@ $< -lm
+
+iq_dc_apply: iq_dc_apply.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+iq_iqbal_tone_cal_cf32: iq_iqbal_tone_cal_cf32.c
+	$(CC) $(CFLAGS) -o $@ $< -lm
+
+iq_iqbal_apply_cf32: iq_iqbal_apply_cf32.c
+	$(CC) $(CFLAGS) -o $@ $<
 
 .PHONY: all clean

@@ -9,6 +9,8 @@
 ; Public variables in this module
 ;--------------------------------------------------------
 	.globl _main
+	.globl _handle_vendorcommand
+	.globl _handle_setupdata
 	.globl _EIPX6
 	.globl _EIPX5
 	.globl _EIPX4
@@ -346,6 +348,7 @@
 	.globl _CPUCS
 	.globl _RES_WAVEDATA_END
 	.globl _GPIF_WAVE_DATA
+	.globl _boot_ifconfig_snapshot
 ;--------------------------------------------------------
 ; special function registers
 ;--------------------------------------------------------
@@ -524,14 +527,12 @@ _EIPX6	=	0x00fc
 ; internal ram data
 ;--------------------------------------------------------
 	.area DSEG    (DATA)
+_boot_ifconfig_snapshot::
+	.ds 1
 ;--------------------------------------------------------
 ; overlayable items in internal ram
 ;--------------------------------------------------------
 	.area	OSEG    (OVR,DATA)
-_main_d_30000_18:
-	.ds 4
-_main_d_30000_19:
-	.ds 4
 ;--------------------------------------------------------
 ; Stack segment in internal ram
 ;--------------------------------------------------------
@@ -775,6 +776,8 @@ __interrupt_vect:
 	.globl __mcs51_genXINIT
 	.globl __mcs51_genXRAMCLEAR
 	.globl __mcs51_genRAMCLEAR
+;	src/main.c:97: BYTE boot_ifconfig_snapshot = 0x00;
+	mov	_boot_ifconfig_snapshot,#0x00
 	.area GSFINAL (CODE)
 	ljmp	__sdcc_program_startup
 ;--------------------------------------------------------
@@ -790,16 +793,21 @@ __sdcc_program_startup:
 ;--------------------------------------------------------
 	.area CSEG    (CODE)
 ;------------------------------------------------------------
-;Allocation info for local variables in function 'main'
+;Allocation info for local variables in function 'handle_vendorcommand'
 ;------------------------------------------------------------
-;d                         Allocated with name '_main_d_30000_18'
-;d                         Allocated with name '_main_d_30000_19'
+;cmd                       Allocated to registers r7 
+;mask                      Allocated to registers r6 
+;val                       Allocated to registers r5 
+;_mcur                     Allocated to registers 
+;_mcur                     Allocated to registers 
+;_mcur                     Allocated to registers 
+;_mcur                     Allocated to registers 
 ;------------------------------------------------------------
-;	src/main.c:14: void main(void)
+;	src/main.c:41: BOOL handle_vendorcommand(BYTE cmd) {
 ;	-----------------------------------------
-;	 function main
+;	 function handle_vendorcommand
 ;	-----------------------------------------
-_main:
+_handle_vendorcommand:
 	ar7 = 0x07
 	ar6 = 0x06
 	ar5 = 0x05
@@ -808,19 +816,340 @@ _main:
 	ar2 = 0x02
 	ar1 = 0x01
 	ar0 = 0x00
-;	src/main.c:23: CPUCS = 0x02;  // 48MHz, output to CLKOUT signal enabled.
+	mov	r7, dpl
+;	src/main.c:42: switch(cmd) {
+	cjne	r7,#0xb0,00181$
+00181$:
+	jnc	00182$
+	ljmp	00136$
+00182$:
+	mov	a,r7
+	add	a,#0xff - 0xbb
+	jnc	00183$
+	ljmp	00136$
+00183$:
+	mov	a,r7
+	add	a,#0x50
+	mov	r6,a
+	add	a,#(00184$-3-.)
+	movc	a,@a+pc
+	mov	dpl,a
+	mov	a,r6
+	add	a,#(00185$-3-.)
+	movc	a,@a+pc
+	mov	dph,a
+	clr	a
+	jmp	@a+dptr
+00184$:
+	.db	00104$
+	.db	00128$
+	.db	00104$
+	.db	00129$
+	.db	00104$
+	.db	00130$
+	.db	00104$
+	.db	00131$
+	.db	00132$
+	.db	00133$
+	.db	00134$
+	.db	00135$
+00185$:
+	.db	00104$>>8
+	.db	00128$>>8
+	.db	00104$>>8
+	.db	00129$>>8
+	.db	00104$>>8
+	.db	00130$>>8
+	.db	00104$>>8
+	.db	00131$>>8
+	.db	00132$>>8
+	.db	00133$>>8
+	.db	00134$>>8
+	.db	00135$>>8
+;	src/main.c:46: case 0xB6: // SET OEA
+00104$:
+;	src/main.c:49: if(EP0BCL != 2) return FALSE; // not enough data yet
+	mov	dptr,#_EP0BCL
+	movx	a,@dptr
+	mov	r6,a
+	cjne	r6,#0x02,00186$
+	sjmp	00106$
+00186$:
+	mov	dpl, #0x00
+	ret
+00106$:
+;	src/main.c:50: BYTE mask = EP0BUF[0];
+	mov	dptr,#_EP0BUF
+	movx	a,@dptr
+	mov	r6,a
+;	src/main.c:51: BYTE val  = EP0BUF[1];
+	mov	dptr,#(_EP0BUF + 0x0001)
+	movx	a,@dptr
+	mov	r5,a
+;	src/main.c:52: if(cmd == 0xB0) FX2_MASKED_WRITE(CPUCS, mask, val);
+	cjne	r7,#0xb0,00126$
 	mov	dptr,#_CPUCS
-	mov	a,#0x02
+	movx	a,@dptr
+	mov	r4,a
+	mov	a,r6
+	cpl	a
+	mov	r3,a
+	mov	a,r4
+	anl	ar3,a
+	mov	a,r6
+	anl	a,r5
+	mov	dptr,#_CPUCS
+	orl	a,r3
 	movx	@dptr,a
-;	src/main.c:25: IFCONFIG = IFCONFIG_VALUE;  SYNCDELAY;
+	sjmp	00127$
+00126$:
+;	src/main.c:53: else if(cmd == 0xB2) FX2_MASKED_WRITE(IFCONFIG, mask, val);
+	cjne	r7,#0xb2,00123$
 	mov	dptr,#_IFCONFIG
-	inc	a
+	movx	a,@dptr
+	mov	r4,a
+	mov	a,r6
+	cpl	a
+	mov	r3,a
+	mov	a,r4
+	anl	ar3,a
+	mov	a,r6
+	anl	a,r5
+	mov	dptr,#_IFCONFIG
+	orl	a,r3
+	movx	@dptr,a
+	sjmp	00127$
+00123$:
+;	src/main.c:54: else if(cmd == 0xB4) FX2_MASKED_WRITE(IOA, mask, val);
+	cjne	r7,#0xb4,00116$
+	mov	r7,_IOA
+	mov	a,r6
+	cpl	a
+	mov	r4,a
+	mov	a,r7
+	anl	ar4,a
+	mov	a,r6
+	anl	a,r5
+	orl	a,r4
+	mov	_IOA,a
+;	src/main.c:55: else FX2_MASKED_WRITE(OEA, mask, val);
+	sjmp	00127$
+00116$:
+	mov	r7,_OEA
+	mov	a,r6
+	cpl	a
+	mov	r4,a
+	mov	a,r7
+	anl	ar4,a
+	mov	a,r6
+	anl	a,r5
+	orl	a,r4
+	mov	_OEA,a
+00127$:
+;	src/main.c:56: return TRUE;
+	mov	dpl, #0x01
+	ret
+;	src/main.c:58: case 0xB1: // GET CPUCS
+00128$:
+;	src/main.c:59: EP0BUF[0] = CPUCS; EP0BCL = 1; return TRUE;
+	mov	dptr,#_CPUCS
+	movx	a,@dptr
+	mov	dptr,#_EP0BUF
+	movx	@dptr,a
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	mov	dpl, #0x01
+	ret
+;	src/main.c:60: case 0xB3: // GET IFCONFIG
+00129$:
+;	src/main.c:61: EP0BUF[0] = IFCONFIG; EP0BCL = 1; return TRUE;
+	mov	dptr,#_IFCONFIG
+	movx	a,@dptr
+	mov	dptr,#_EP0BUF
+	movx	@dptr,a
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	mov	dpl, #0x01
+	ret
+;	src/main.c:62: case 0xB5: // GET PORTA
+00130$:
+;	src/main.c:63: EP0BUF[0] = IOA; EP0BCL = 1; return TRUE;
+	mov	dptr,#_EP0BUF
+	mov	a,_IOA
+	movx	@dptr,a
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	mov	dpl, #0x01
+	ret
+;	src/main.c:64: case 0xB7: // GET OEA
+00131$:
+;	src/main.c:65: EP0BUF[0] = OEA; EP0BCL = 1; return TRUE;
+	mov	dptr,#_EP0BUF
+	mov	a,_OEA
+	movx	@dptr,a
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	mov	dpl, #0x01
+	ret
+;	src/main.c:66: case 0xB8: // GET EP6CS (FIFO status)
+00132$:
+;	src/main.c:67: EP0BUF[0] = EP6CS; SD(); EP0BCL = 1; SD(); return TRUE;
+	mov	dptr,#_EP6CS
+	movx	a,@dptr
+	mov	r7,a
+	mov	dptr,#_EP0BUF
 	movx	@dptr,a
 	nop	
 	nop	
 	nop	
 	nop	
-;	src/main.c:26: REVCTL = 0x03;    SYNCDELAY;  // See TRM...
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dpl, #0x01
+;	src/main.c:68: case 0xB9: // GET PINFLAGSAB
+	ret
+00133$:
+;	src/main.c:69: EP0BUF[0] = PINFLAGSAB; SD(); EP0BCL = 1; SD(); return TRUE;
+	mov	dptr,#_PINFLAGSAB
+	movx	a,@dptr
+	mov	r7,a
+	mov	dptr,#_EP0BUF
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dpl, #0x01
+;	src/main.c:70: case 0xBA: // GET PINFLAGSCD
+	ret
+00134$:
+;	src/main.c:71: EP0BUF[0] = PINFLAGSCD; SD(); EP0BCL = 1; SD(); return TRUE;
+	mov	dptr,#_PINFLAGSCD
+	movx	a,@dptr
+	mov	r7,a
+	mov	dptr,#_EP0BUF
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dpl, #0x01
+;	src/main.c:72: case 0xBB: // GET IFCONFIG snapshot
+	ret
+00135$:
+;	src/main.c:74: EP0BUF[0] = boot_ifconfig_snapshot; SD(); EP0BCL = 1; SD(); return TRUE;
+	mov	dptr,#_EP0BUF
+	mov	a,_boot_ifconfig_snapshot
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dptr,#_EP0BCL
+	mov	a,#0x01
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	mov	dpl, #0x01
+;	src/main.c:75: }
+	ret
+00136$:
+;	src/main.c:76: return FALSE; // not handled
+	mov	dpl, #0x00
+;	src/main.c:77: }
+	ret
+;------------------------------------------------------------
+;Allocation info for local variables in function 'main'
+;------------------------------------------------------------
+;blink                     Allocated to registers r4 r5 r6 r7 
+;------------------------------------------------------------
+;	src/main.c:99: void main(void) {
+;	-----------------------------------------
+;	 function main
+;	-----------------------------------------
+_main:
+;	src/main.c:107: CPUCS = 0x0A;  SD(); // 24 MHz, CLKOUT enabled
+	mov	dptr,#_CPUCS
+	mov	a,#0x0a
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+	nop	
+;	src/main.c:109: IFCONFIG = IFCONFIG_VALUE;  SYNCDELAY;
+	mov	dptr,#_IFCONFIG
+	mov	a,#0x03
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+;	src/main.c:113: boot_ifconfig_snapshot = IFCONFIG;
+	mov	dptr,#_IFCONFIG
+	movx	a,@dptr
+	mov	_boot_ifconfig_snapshot,a
+;	src/main.c:115: REVCTL = 0x03;    SYNCDELAY;  // Enhanced Packet Handling (TRM recommendation for slave FIFO)
 	mov	dptr,#_REVCTL
 	mov	a,#0x03
 	movx	@dptr,a
@@ -828,7 +1157,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:29: EP6CFG = 0xe0;  SYNCDELAY;
+;	src/main.c:118: EP6CFG = 0xE0;  SYNCDELAY; // 1110 0000: VALID + IN + BULK + Quad
 	mov	dptr,#_EP6CFG
 	mov	a,#0xe0
 	movx	@dptr,a
@@ -836,7 +1165,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:31: FIFORESET = 0x80;  SYNCDELAY;  // NAK all requests from host.
+;	src/main.c:121: FIFORESET = 0x80;  SYNCDELAY;  // NAK all requests
 	mov	dptr,#_FIFORESET
 	mov	a,#0x80
 	movx	@dptr,a
@@ -844,7 +1173,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:32: FIFORESET = 0x82;  SYNCDELAY;  // Reset individual EP (2,4,6,8)
+;	src/main.c:122: FIFORESET = 0x82;  SYNCDELAY;  // Reset EP2
 	mov	dptr,#_FIFORESET
 	mov	a,#0x82
 	movx	@dptr,a
@@ -852,7 +1181,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:33: FIFORESET = 0x84;  SYNCDELAY;
+;	src/main.c:123: FIFORESET = 0x84;  SYNCDELAY;  // Reset EP4
 	mov	dptr,#_FIFORESET
 	mov	a,#0x84
 	movx	@dptr,a
@@ -860,7 +1189,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:34: FIFORESET = 0x86;  SYNCDELAY;
+;	src/main.c:124: FIFORESET = 0x86;  SYNCDELAY;  // Reset EP6
 	mov	dptr,#_FIFORESET
 	mov	a,#0x86
 	movx	@dptr,a
@@ -868,7 +1197,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:35: FIFORESET = 0x88;  SYNCDELAY;
+;	src/main.c:125: FIFORESET = 0x88;  SYNCDELAY;  // Reset EP8
 	mov	dptr,#_FIFORESET
 	mov	a,#0x88
 	movx	@dptr,a
@@ -876,7 +1205,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:36: FIFORESET = 0x00;  SYNCDELAY;  // Resume normal operation.
+;	src/main.c:126: FIFORESET = 0x00;  SYNCDELAY;  // Release NAKs
 	mov	dptr,#_FIFORESET
 	clr	a
 	movx	@dptr,a
@@ -884,15 +1213,15 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:39: EP6FIFOCFG = 0x0e;  SYNCDELAY;
+;	src/main.c:129: EP6FIFOCFG = 0x0C;  SYNCDELAY;
 	mov	dptr,#_EP6FIFOCFG
-	mov	a,#0x0e
+	mov	a,#0x0c
 	movx	@dptr,a
 	nop	
 	nop	
 	nop	
 	nop	
-;	src/main.c:42: PORTACFG = 0x00;  SYNCDELAY; // (delay maybe not needed)
+;	src/main.c:132: PORTACFG = 0x00;  SYNCDELAY;
 	mov	dptr,#_PORTACFG
 	clr	a
 	movx	@dptr,a
@@ -900,7 +1229,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:45: FIFOPINPOLAR=0x00;  SYNCDELAY;
+;	src/main.c:135: FIFOPINPOLAR=0x00;  SYNCDELAY;
 	mov	dptr,#_FIFOPINPOLAR
 	clr	a
 	movx	@dptr,a
@@ -908,7 +1237,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:49: EP6AUTOINLENH = 0x02; SYNCDELAY;  // MSB
+;	src/main.c:138: EP6AUTOINLENH = 0x02; SYNCDELAY;  // MSB
 	mov	dptr,#_EP6AUTOINLENH
 	mov	a,#0x02
 	movx	@dptr,a
@@ -916,7 +1245,7 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:50: EP6AUTOINLENL = 0x00; SYNCDELAY;  // LSB
+;	src/main.c:139: EP6AUTOINLENL = 0x00; SYNCDELAY;  // LSB
 	mov	dptr,#_EP6AUTOINLENL
 	clr	a
 	movx	@dptr,a
@@ -924,76 +1253,70 @@ _main:
 	nop	
 	nop	
 	nop	
-;	src/main.c:53: OEA |= 0x01; // PA0 output
+;	src/main.c:141: PINFLAGSAB = 0x00; SYNCDELAY; // No special flags on Port A/B pins  
+	mov	dptr,#_PINFLAGSAB
+	clr	a
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+;	src/main.c:142: PINFLAGSCD = 0x00; SYNCDELAY; // No special flags on Port C/D pins
+	mov	dptr,#_PINFLAGSCD
+	clr	a
+	movx	@dptr,a
+	nop	
+	nop	
+	nop	
+	nop	
+;	src/main.c:145: OEA |= 0x01; // PA0 output
 	orl	_OEA,#0x01
-;	src/main.c:54: while(1){
-00104$:
-;	src/main.c:55: PA0 = 1; for(volatile unsigned long d=0; d<40000; ++d);
+;	src/main.c:148: unsigned long blink = 0UL;
+	mov	r4,#0x00
+	mov	r5,#0x00
+	mov	r6,#0x00
+	mov	r7,#0x00
+00107$:
+;	src/main.c:151: handle_setupdata();
+	push	ar7
+	push	ar6
+	push	ar5
+	push	ar4
+	lcall	_handle_setupdata
+	pop	ar4
+	pop	ar5
+	pop	ar6
+	pop	ar7
+;	src/main.c:152: if(++blink == 40000UL) { PA0 = 1; }
+	inc	r4
+	cjne	r4,#0x00,00129$
+	inc	r5
+	cjne	r5,#0x00,00129$
+	inc	r6
+	cjne	r6,#0x00,00129$
+	inc	r7
+00129$:
+	cjne	r4,#0x40,00104$
+	cjne	r5,#0x9c,00104$
+	cjne	r6,#0x00,00104$
+	cjne	r7,#0x00,00104$
 ;	assignBit
 	setb	_PA0
-	clr	a
-	mov	_main_d_30000_18,a
-	mov	(_main_d_30000_18 + 1),a
-	mov	(_main_d_30000_18 + 2),a
-	mov	(_main_d_30000_18 + 3),a
-00107$:
-	clr	c
-	mov	a,_main_d_30000_18
-	subb	a,#0x40
-	mov	a,(_main_d_30000_18 + 1)
-	subb	a,#0x9c
-	mov	a,(_main_d_30000_18 + 2)
-	subb	a,#0x00
-	mov	a,(_main_d_30000_18 + 3)
-	subb	a,#0x00
-	jnc	00101$
-	mov	a,#0x01
-	add	a, _main_d_30000_18
-	mov	_main_d_30000_18,a
-	clr	a
-	addc	a, (_main_d_30000_18 + 1)
-	mov	(_main_d_30000_18 + 1),a
-	clr	a
-	addc	a, (_main_d_30000_18 + 2)
-	mov	(_main_d_30000_18 + 2),a
-	clr	a
-	addc	a, (_main_d_30000_18 + 3)
-	mov	(_main_d_30000_18 + 3),a
 	sjmp	00107$
-00101$:
-;	src/main.c:56: PA0 = 0; for(volatile unsigned long d=0; d<40000; ++d);
+00104$:
+;	src/main.c:153: else if(blink == 80000UL) { PA0 = 0; blink = 0UL; }
+	cjne	r4,#0x80,00107$
+	cjne	r5,#0x38,00107$
+	cjne	r6,#0x01,00107$
+	cjne	r7,#0x00,00107$
 ;	assignBit
 	clr	_PA0
-	clr	a
-	mov	_main_d_30000_19,a
-	mov	(_main_d_30000_19 + 1),a
-	mov	(_main_d_30000_19 + 2),a
-	mov	(_main_d_30000_19 + 3),a
-00110$:
-	clr	c
-	mov	a,_main_d_30000_19
-	subb	a,#0x40
-	mov	a,(_main_d_30000_19 + 1)
-	subb	a,#0x9c
-	mov	a,(_main_d_30000_19 + 2)
-	subb	a,#0x00
-	mov	a,(_main_d_30000_19 + 3)
-	subb	a,#0x00
-	jnc	00104$
-	mov	a,#0x01
-	add	a, _main_d_30000_19
-	mov	_main_d_30000_19,a
-	clr	a
-	addc	a, (_main_d_30000_19 + 1)
-	mov	(_main_d_30000_19 + 1),a
-	clr	a
-	addc	a, (_main_d_30000_19 + 2)
-	mov	(_main_d_30000_19 + 2),a
-	clr	a
-	addc	a, (_main_d_30000_19 + 3)
-	mov	(_main_d_30000_19 + 3),a
-;	src/main.c:59: }
-	sjmp	00110$
+	mov	r4,#0x00
+	mov	r5,#0x00
+	mov	r6,#0x00
+	mov	r7,#0x00
+;	src/main.c:160: }
+	sjmp	00107$
 	.area CSEG    (CODE)
 	.area CONST   (CODE)
 	.area XINIT   (CODE)

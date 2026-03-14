@@ -1,9 +1,5 @@
 #pragma once
 
-// -------- Project configuration --------
-// Endpoint numbers (FX2 standard: EP8 IN -> 0x88)
-#define FX2_EP_IN  0x88
-
 // AUTOIN packet commit length (512 bytes for HS bulk max packet)
 #define AUTOIN_LEN 512
 
@@ -19,6 +15,9 @@
     // Bit 2: GSTATE     (GPIF only)
     // Bit 1: IFCFG1     (interface mode)
     // Bit 0: IFCFG0     (interface mode)
+// Target: external IFCLK (IFCLKSRC=0), IFCLK output disabled (IFCLKOE=0),
+// synchronous (ASYNC=0), Slave FIFO (IFCFG=11), 16-bit wordwide
+// Bit layout: 0b0100_0011 => 0x43
 #define IFCONFIG_VALUE 0x03
 
 

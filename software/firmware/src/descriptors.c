@@ -53,9 +53,9 @@ __code const uint8_t cfg_dscr[] = {
     0x00,           // bInterfaceSubClass
     0x00,           // bInterfaceProtocol
     0,              // iInterface
-    // Endpoint (Bulk IN EP8 512B)
+    // Endpoint (Bulk IN EP6 512B)
     7, DT_ENDPOINT,
-    EP8_IN,         // bEndpointAddress
+    EP6_IN,         // bEndpointAddress
     0x02,           // bmAttributes (Bulk)
     0x00,0x02,      // wMaxPacketSize = 512
     0               // bInterval (ignored for bulk)

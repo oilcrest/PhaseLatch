@@ -10,7 +10,6 @@ The board is designed as a modular Arduino-shield-style form factor and is inten
 
 PhaseLatch is not intended to achieve full theoretical ADC bandwidth on a 6502. Instead, it serves as a practical exploration of real-world limitations, architectural trade-offs, and creative signal-processing approaches on vintage computing hardware.
 
-Though noone says it can't be used with a more powerful platform.. But.. Spoilers :)
 
 <img src="PhaseLatch.jpg" alt="PhaseLatch board photo" style="width: 440px;">
 
@@ -23,6 +22,27 @@ Interested in owning a PhaseLatch?
 [6502 source code still lives over on the 65uino project](https://github.com/AndersBNielsen/65uino/)
 
 The main 65uino firmware currently comes with support for the PhaseLatch built in. Time of writing, use the SDR branch. 
+
+To get the full bandwidth out of PhaseLatch, it can also be used with an **FX2LP** USB streaming board instead of the **65uino**.
+
+## Software
+The `software/` folder contains the USB streamer firmware + host-side tools for getting PhaseLatch data into SDR software.
+
+- [software/README.md](software/README.md): Overview, build instructions, and a demo cheat sheet.
+- [software/firmware/](software/firmware/): FX2/FX2LP firmware (USB streaming).
+- [software/host/](software/host/): Host utilities (USB reader, format conversion, DC / IQ correction).
+- [software/examples/](software/examples/): Example pipelines (including streaming to `/tmp/iq.fifo` for Gqrx).
+- [software/doc/](software/doc/): Notes on wiring and rate planning.
+
+## Using with an FX2LP (USB streaming)
+PhaseLatch includes header footprints intended for wiring to an **FX2LP** dev board. The FX2LP provides USB 2.0 high‑speed bulk streaming and acts as the “bridge” from the ADC to a host PC.
+
+At a high level the flow is:
+- FX2LP firmware streams raw samples over USB
+- host reads via libusb and converts to CF32
+- stream is written to `/tmp/iq.fifo` so **Gqrx** can open it
+
+Start with the guide in `software/README.md`, then use `software/examples/pipeline.sh` for a one-command stream to `/tmp/iq.fifo`.
 
 ## Getting a PCB
 

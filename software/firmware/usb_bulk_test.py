@@ -11,7 +11,7 @@ cfg = dev.get_active_configuration()
 intf = cfg[(0,1)]  # Interface 0, AltSetting 1
 dev.set_interface_altsetting(interface=intf.bInterfaceNumber, alternate_setting=intf.bAlternateSetting)
 usb.util.claim_interface(dev, intf.bInterfaceNumber)
-ep = usb.util.find_descriptor(intf, bEndpointAddress=0x88)
+ep = usb.util.find_descriptor(intf, bEndpointAddress=0x86)
 if ep is None:
     print("Endpoint 0x88 not found in alt 1")
 else:
